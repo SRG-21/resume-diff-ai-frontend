@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import type { CompareResponse, CompareState } from '../types/api';
+import { getAccessToken } from '../context/AuthContext';
 
 interface UseCompareParams {
   apiBaseUrl?: string;
@@ -33,6 +34,12 @@ export const useCompare = ({ apiBaseUrl = '/api' }: UseCompareParams = {}) => {
       setState({ data: null, loading: true, error: null });
 
       try {
+        // Get auth token
+        const accessToken = getAccessToken();
+        if (!accessToken) {
+          throw new Error('Please log in to compare resumes');
+        }
+
         // Build FormData
         const formData = new FormData();
 
@@ -47,18 +54,23 @@ export const useCompare = ({ apiBaseUrl = '/api' }: UseCompareParams = {}) => {
         // Construct full API URL
         const apiUrl = `${apiBaseUrl}/compare`;
 
-        // Make API request
+        // Make API request with auth header
         const response = await fetch(apiUrl, {
           method: 'POST',
           body: formData,
           signal: abortControllerRef.current.signal,
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
         });
 
         if (!response.ok) {
           let errorMessage = `Server error: ${response.status}`;
           
           // Provide specific error messages based on status code
-          if (response.status === 404) {
+          if (response.status === 401) {
+            errorMessage = 'Session expired. Please log in again.';
+          } else if (response.status === 404) {
             errorMessage = 'API endpoint not found (404). Please ensure the backend server is running and configured correctly.';
           } else if (response.status === 500) {
             errorMessage = 'Internal server error (500). Please check the backend server logs.';
@@ -67,7 +79,7 @@ export const useCompare = ({ apiBaseUrl = '/api' }: UseCompareParams = {}) => {
           } else {
             try {
               const errorData = await response.json();
-              errorMessage = errorData.message || errorData.error || errorMessage;
+              errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
             } catch {
               // If response is not JSON, use status text
               errorMessage = response.statusText || errorMessage;

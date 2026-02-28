@@ -16,6 +16,14 @@
          transition-colors duration-200 min-h-[44px];
 }
 
+.btn-danger {
+  @apply bg-red-600 text-white px-6 py-3 rounded-lg font-medium 
+         hover:bg-red-700 focus:outline-none focus:ring-2 
+         focus:ring-red-500 focus:ring-offset-2 
+         disabled:bg-gray-300 disabled:cursor-not-allowed
+         transition-colors duration-200 min-h-[44px];
+}
+
 .input-field {
   @apply w-full px-4 py-3 border border-gray-300 rounded-lg 
          focus:outline-none focus:ring-2 focus:ring-blue-500 
@@ -31,4 +39,17 @@
 .skill-chip-missing {
   @apply inline-flex items-center px-3 py-1.5 rounded-full text-sm 
          font-medium min-h-[32px] bg-red-100 text-red-800;
+}
+
+/* Auth form styles */
+.auth-card {
+  @apply bg-white rounded-xl shadow-md p-8;
+}
+
+.auth-label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+.auth-link {
+  @apply text-blue-600 hover:text-blue-700 font-medium;
 }
