@@ -99,11 +99,11 @@ export const AiTools: React.FC<{ comparisonId: string }> = ({ comparisonId }) =>
     );
   }
 
-  const download = () =>
+  const download = (format: 'docx' | 'pdf') =>
     run('export', async () => {
       const chosen = rewrites ? rewrites.rewrites.filter((_, i) => accepted.has(i)) : [];
-      const blob = await exportTailored(comparisonId, chosen.map(({ original, suggested }) => ({ original, suggested })));
-      saveBlob(blob, 'tailored_resume.docx');
+      const blob = await exportTailored(comparisonId, chosen.map(({ original, suggested }) => ({ original, suggested })), format);
+      saveBlob(blob, `tailored_resume.${format}`);
     });
 
   const copy = async (text: string) => {
@@ -205,9 +205,14 @@ export const AiTools: React.FC<{ comparisonId: string }> = ({ comparisonId }) =>
 
               <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-4">
                 {can('export') && (
-                  <button className="btn-primary" onClick={download} disabled={busy === 'export'}>
-                    {busy === 'export' ? 'Preparing…' : `Download tailored resume (.docx)`}
-                  </button>
+                  <>
+                    <button className="btn-primary" onClick={() => download('docx')} disabled={busy === 'export'}>
+                      {busy === 'export' ? 'Preparing…' : 'Download tailored resume (.docx)'}
+                    </button>
+                    <button className="btn-secondary" onClick={() => download('pdf')} disabled={busy === 'export'}>
+                      Download PDF
+                    </button>
+                  </>
                 )}
                 <button
                   className="btn-secondary"

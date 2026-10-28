@@ -69,7 +69,11 @@ describe('AiTools', () => {
     await userEvent.click(screen.getByRole('button', { name: /download tailored resume/i }));
 
     await waitFor(() => expect(endpoints.exportTailored).toHaveBeenCalled());
-    expect(endpoints.exportTailored).toHaveBeenCalledWith('c1', [{ original: 'a', suggested: 'A+' }]);
+    expect(endpoints.exportTailored).toHaveBeenCalledWith('c1', [{ original: 'a', suggested: 'A+' }], 'docx');
+
+    vi.mocked(endpoints.exportTailored).mockResolvedValueOnce(new Blob(['pdf']));
+    await userEvent.click(screen.getByRole('button', { name: 'Download PDF' }));
+    await waitFor(() => expect(endpoints.exportTailored).toHaveBeenLastCalledWith('c1', [{ original: 'a', suggested: 'A+' }], 'pdf'));
   });
 
   it('restores previously generated output without calling the AI again', async () => {

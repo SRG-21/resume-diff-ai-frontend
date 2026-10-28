@@ -54,8 +54,12 @@ export const generateCoverLetter = (comparisonId: string, tone: string, regenera
 export const generateInterviewPrep = (comparisonId: string, regenerate = false) =>
   apiJson<{ questions: InterviewQuestion[] }>('/ai/interview-prep', jsonBody({ comparison_id: comparisonId, regenerate }));
 
-export const exportTailored = async (comparisonId: string, accepted: { original: string; suggested: string }[]) => {
-  const response = await apiFetch('/export/tailored', jsonBody({ comparison_id: comparisonId, accepted }));
+export const exportTailored = async (
+  comparisonId: string,
+  accepted: { original: string; suggested: string }[],
+  format: 'docx' | 'pdf' = 'docx',
+) => {
+  const response = await apiFetch('/export/tailored', jsonBody({ comparison_id: comparisonId, accepted, format }));
   if (!response.ok) throw await toApiError(response);
   return response.blob();
 };
