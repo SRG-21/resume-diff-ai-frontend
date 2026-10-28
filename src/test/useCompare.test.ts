@@ -1,9 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useCompare } from '../hooks/useCompare';
+
+const fetchMock = () => globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+
+const okResponse = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+const errorResponse = (status: number, body: unknown) => ({ ok: false, status, json: async () => body });
+
+const pdf = (name = 'resume.pdf') => new File(['test'], name, { type: 'application/pdf' });
 
 describe('useCompare hook', () => {
   const mockResponse = {
+    id: 'c1',
     matchPercent: 75,
     matchedSkills: ['JavaScript', 'React', 'TypeScript'],
     missingSkills: ['Python', 'Django'],
@@ -11,6 +19,7 @@ describe('useCompare hook', () => {
   };
 
   beforeEach(() => {
+    localStorage.clear();
     globalThis.fetch = vi.fn();
   });
 
@@ -18,164 +27,142 @@ describe('useCompare hook', () => {
     vi.restoreAllMocks();
   });
 
-  it('should initialize with default state', () => {
+  it('starts idle', () => {
     const { result } = renderHook(() => useCompare());
-
     expect(result.current.data).toBeNull();
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
   });
 
-  it('should handle successful API call', async () => {
-    (globalThis.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockResponse,
-    });
-
+  it('stores the response on success and sends the bearer token', async () => {
+    localStorage.setItem('resume_diff_access_token', 'tok123');
+    fetchMock().mockResolvedValueOnce(okResponse(mockResponse));
     const { result } = renderHook(() => useCompare());
 
-    const resumeFile = new File(['test'], 'resume.pdf', { type: 'application/pdf' });
-    const jdFile = new File(['test'], 'jd.pdf', { type: 'application/pdf' });
-
-    await result.current.compare({
-      resumeFile,
-      jdFile,
-    });
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
+    await act(() => result.current.compare({ resumeFile: pdf(), jdFile: pdf('jd.pdf') }));
 
     expect(result.current.data).toEqual(mockResponse);
-    expect(result.current.error).toBeNull();
-  });
-
-  it('should handle API error', async () => {
-    (globalThis.fetch as any).mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      statusText: 'Internal Server Error',
-      json: async () => ({ message: 'Server error' }),
-    });
-
-    const { result } = renderHook(() => useCompare());
-
-    const resumeFile = new File(['test'], 'resume.pdf', { type: 'application/pdf' });
-
-    await result.current.compare({
-      resumeFile,
-      jdText: 'Job description text',
-    });
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.data).toBeNull();
-    expect(result.current.error).toContain('Server error');
-  });
-
-  it('should build FormData correctly with jdFile', async () => {
-    let capturedFormData: FormData | undefined;
-
-    (globalThis.fetch as any).mockImplementationOnce((_url: string, options: any) => {
-      capturedFormData = options.body;
-      return Promise.resolve({
-        ok: true,
-        json: async () => mockResponse,
-      });
-    });
-
-    const { result } = renderHook(() => useCompare());
-
-    const resumeFile = new File(['resume'], 'resume.pdf', { type: 'application/pdf' });
-    const jdFile = new File(['jd'], 'jd.pdf', { type: 'application/pdf' });
-
-    await result.current.compare({
-      resumeFile,
-      jdFile,
-    });
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(capturedFormData).toBeInstanceOf(FormData);
-    expect(capturedFormData?.get('resume_file')).toBe(resumeFile);
-    expect(capturedFormData?.get('jd_file')).toBe(jdFile);
-  });
-
-  it('should build FormData correctly with jdText', async () => {
-    let capturedFormData: FormData | undefined;
-
-    (globalThis.fetch as any).mockImplementationOnce((_url: string, options: any) => {
-      capturedFormData = options.body;
-      return Promise.resolve({
-        ok: true,
-        json: async () => mockResponse,
-      });
-    });
-
-    const { result } = renderHook(() => useCompare());
-
-    const resumeFile = new File(['resume'], 'resume.pdf', { type: 'application/pdf' });
-    const jdText = 'Looking for a developer...';
-
-    await result.current.compare({
-      resumeFile,
-      jdText,
-    });
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(capturedFormData).toBeInstanceOf(FormData);
-    expect(capturedFormData?.get('resume_file')).toBe(resumeFile);
-    expect(capturedFormData?.get('jd_text')).toBe(jdText);
-  });
-
-  it('should handle request cancellation', async () => {
-    (globalThis.fetch as any).mockImplementationOnce(() => {
-      return new Promise((_, reject) => {
-        setTimeout(() => reject(new DOMException('Aborted', 'AbortError')), 100);
-      });
-    });
-
-    const { result } = renderHook(() => useCompare());
-
-    const resumeFile = new File(['test'], 'resume.pdf', { type: 'application/pdf' });
-
-    const promise = result.current.compare({
-      resumeFile,
-      jdText: 'Job description',
-    });
-
-    result.current.cancel();
-
-    await promise;
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.error).toBeNull();
-    expect(result.current.data).toBeNull();
-  });
-
-  it('should reset state', () => {
-    const { result } = renderHook(() => useCompare());
-
-    // Manually set some state
-    result.current.compare({
-      resumeFile: new File(['test'], 'resume.pdf', { type: 'application/pdf' }),
-      jdText: 'test',
-    });
-
-    result.current.reset();
-
-    expect(result.current.data).toBeNull();
     expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+
+    const [url, init] = fetchMock().mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/compare$/);
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer tok123');
+    // multipart bodies must not get a JSON content type
+    expect(new Headers(init.headers).has('Content-Type')).toBe(false);
+  });
+
+  it('surfaces the API error message', async () => {
+    fetchMock().mockResolvedValueOnce(errorResponse(500, { detail: 'Server error' }));
+    const { result } = renderHook(() => useCompare());
+
+    await act(() => result.current.compare({ resumeFile: pdf(), jdText: 'Job description text' }));
+
+    expect(result.current.data).toBeNull();
+    expect(result.current.error).toBe('Server error');
+  });
+
+  it('exposes the error code for quota problems so the UI can offer an upgrade', async () => {
+    fetchMock().mockResolvedValueOnce(
+      errorResponse(402, { detail: { code: 'quota_exceeded', message: 'You have used all 3 scans' } }),
+    );
+    const { result } = renderHook(() => useCompare());
+
+    await act(() => result.current.compare({ resumeFile: pdf(), jdText: 'Job description text' }));
+
+    expect(result.current.error).toBe('You have used all 3 scans');
+    expect(result.current.errorCode).toBe('quota_exceeded');
+  });
+
+  it('reports an expired session on 401 when it cannot refresh', async () => {
+    fetchMock().mockResolvedValue(errorResponse(401, { detail: 'Invalid or expired token' }));
+    const { result } = renderHook(() => useCompare());
+
+    await act(() => result.current.compare({ resumeFile: pdf(), jdText: 'Job description text' }));
+
+    expect(result.current.error).toMatch(/session expired/i);
+  });
+
+  it('gives a friendly message when the network is down', async () => {
+    fetchMock().mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const { result } = renderHook(() => useCompare());
+
+    await act(() => result.current.compare({ resumeFile: pdf(), jdText: 'Job description text' }));
+
+    expect(result.current.error).toMatch(/unable to connect/i);
+  });
+
+  it('builds FormData with jd_file', async () => {
+    fetchMock().mockResolvedValueOnce(okResponse(mockResponse));
+    const { result } = renderHook(() => useCompare());
+    const resumeFile = pdf();
+    const jdFile = pdf('jd.pdf');
+
+    await act(() => result.current.compare({ resumeFile, jdFile }));
+
+    const form = (fetchMock().mock.calls[0][1] as RequestInit).body as FormData;
+    expect(form.get('resume_file')).toBe(resumeFile);
+    expect(form.get('jd_file')).toBe(jdFile);
+  });
+
+  it('builds FormData with jd_text and save_resume_as', async () => {
+    fetchMock().mockResolvedValueOnce(okResponse(mockResponse));
+    const { result } = renderHook(() => useCompare());
+    const resumeFile = pdf();
+
+    await act(() => result.current.compare({ resumeFile, jdText: 'Looking for a developer...', saveResumeAs: 'Main CV' }));
+
+    const form = (fetchMock().mock.calls[0][1] as RequestInit).body as FormData;
+    expect(form.get('jd_text')).toBe('Looking for a developer...');
+    expect(form.get('save_resume_as')).toBe('Main CV');
+    expect(form.has('resume_id')).toBe(false);
+  });
+
+  it('uses a saved resume id instead of uploading', async () => {
+    fetchMock().mockResolvedValueOnce(okResponse(mockResponse));
+    const { result } = renderHook(() => useCompare());
+
+    await act(() => result.current.compare({ resumeId: 'r-1', jdText: 'Looking for a developer...' }));
+
+    const form = (fetchMock().mock.calls[0][1] as RequestInit).body as FormData;
+    expect(form.get('resume_id')).toBe('r-1');
+    expect(form.has('resume_file')).toBe(false);
+  });
+
+  it('treats a cancelled request as neither data nor error', async () => {
+    fetchMock().mockImplementationOnce(
+      (_url: string, init: RequestInit) =>
+        new Promise((_, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        }),
+    );
+    const { result } = renderHook(() => useCompare());
+
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = result.current.compare({ resumeFile: pdf(), jdText: 'Job description' });
+    });
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      result.current.cancel();
+      await pending;
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(result.current.data).toBeNull();
+  });
+
+  it('reset clears results and errors', async () => {
+    fetchMock().mockResolvedValueOnce(okResponse(mockResponse));
+    const { result } = renderHook(() => useCompare());
+    await act(() => result.current.compare({ resumeFile: pdf(), jdText: 'x'.repeat(20) }));
+    expect(result.current.data).not.toBeNull();
+
+    act(() => result.current.reset());
+
+    expect(result.current.data).toBeNull();
     expect(result.current.error).toBeNull();
   });
 });

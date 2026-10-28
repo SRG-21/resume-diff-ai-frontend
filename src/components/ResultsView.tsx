@@ -3,10 +3,13 @@ import type { CompareResponse } from '../types/api';
 import { ProgressCircle } from './ProgressCircle';
 import { SkillChips } from './SkillChips';
 import { copyToClipboard, exportToCSV, formatSkillsList } from '../utils/export';
+import { BreakdownBars } from './BreakdownBars';
+import { AtsPanel } from './AtsPanel';
+import { UpgradePrompt } from './UpgradePrompt';
 
 interface ResultsViewProps {
   data: CompareResponse;
-  onNewComparison: () => void;
+  onNewComparison?: () => void;
 }
 
 export const ResultsView: React.FC<ResultsViewProps> = ({ data, onNewComparison }) => {
@@ -61,9 +64,45 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, onNewComparison 
 
       {/* Match Percentage */}
       <div className="bg-white rounded-xl shadow-md p-6 flex flex-col items-center">
+        {(data.jobTitle || data.company) && (
+          <p className="mb-1 text-sm text-gray-500">
+            {[data.jobTitle, data.company].filter(Boolean).join(' · ')}
+          </p>
+        )}
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Overall Match</h2>
         <ProgressCircle percentage={data.matchPercent} />
+        {data.usage && (
+          <p className="mt-4 text-xs text-gray-500">
+            {data.usage.used} of {data.usage.limit} scans used this month
+          </p>
+        )}
       </div>
+
+      {/* Score breakdown (paid) and ATS check */}
+      {(data.breakdown || data.ats || data.locked?.includes('breakdown')) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {(data.breakdown || data.locked?.includes('breakdown')) && (
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Score breakdown</h3>
+              {data.breakdown ? (
+                <BreakdownBars breakdown={data.breakdown} />
+              ) : (
+                <UpgradePrompt
+                  compact
+                  source="breakdown"
+                  message="See how you score on hard skills, soft skills, experience, education, job title and keywords."
+                />
+              )}
+            </div>
+          )}
+          {data.ats && (
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">ATS formatting check</h3>
+              <AtsPanel ats={data.ats} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Matched and Missing Skills Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -207,6 +246,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, onNewComparison 
       </div>
 
       {/* New Comparison Button */}
+      {onNewComparison && (
       <div className="flex justify-center">
         <button onClick={onNewComparison} className="btn-primary">
           <svg
@@ -225,6 +265,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, onNewComparison 
           New Comparison
         </button>
       </div>
+      )}
     </div>
   );
 };

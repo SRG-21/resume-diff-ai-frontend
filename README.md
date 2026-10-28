@@ -217,3 +217,24 @@ MIT
 - React Team for the amazing framework
 - Tailwind CSS for the utility-first CSS framework
 - Vite for the blazing fast build tool
+
+## SaaS features
+
+Routes: `/` landing, `/pricing`, `/privacy`, `/terms`, `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/verify-email`, and (signed in) `/app`, `/history`, `/history/:id`, `/resumes`, `/tracker`, `/bulk` (Coach), `/billing`.
+
+- Plan state comes from `GET /api/billing/status` (`BillingProvider`); components call `useBilling().can('rewrites')` and show an `UpgradePrompt` when a feature is not included. The server enforces the same rules, so hiding UI is never the only protection.
+- `src/api/client.ts` attaches the bearer token, refreshes it once on a 401 (shared across concurrent requests) and signs the user out if refresh fails.
+- Display prices live in `src/config/pricing.ts` and must match the Stripe Prices configured on the backend.
+- Copy in `src/pages/LegalPages.tsx` is a starting template describing how the product behaves. **Have a lawyer review it, and confirm the refund policy and provider list, before launch.**
+
+### Browser extension (experimental)
+
+`extension/` is a Manifest V3 extension that scores the job page you are viewing against a saved resume. Load it via `chrome://extensions` → Developer mode → Load unpacked. It signs in with email and password and has not been tested in a browser or across LinkedIn/Indeed page layouts; treat it as a starting point.
+
+## Testing
+
+```bash
+npm test          # vitest
+npm run lint
+npm run build
+```

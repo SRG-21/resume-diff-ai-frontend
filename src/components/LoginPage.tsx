@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/useAuth';
 import { ErrorMessage } from './ErrorMessage';
+import { GoogleButton } from './GoogleButton';
 
 // Email regex pattern
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -13,7 +14,9 @@ interface FormErrors {
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { login, isLoading, error, clearError } = useAuth();
+  const location = useLocation();
+  const { login, loginWithGoogle, isLoading, error, clearError } = useAuth();
+  const destination = (location.state as { from?: { pathname: string } } | null)?.from?.pathname || '/app';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,7 +50,7 @@ export const LoginPage: React.FC = () => {
 
     try {
       await login({ email: email.toLowerCase(), password });
-      navigate('/');
+      navigate(destination, { replace: true });
     } catch {
       // Error is handled by auth context
     }
@@ -76,6 +79,16 @@ export const LoginPage: React.FC = () => {
               />
             </div>
           )}
+
+          <GoogleButton
+            text="signin_with"
+            onCredential={(credential) => {
+              clearError();
+              loginWithGoogle(credential)
+                .then(() => navigate(destination, { replace: true }))
+                .catch(() => {});
+            }}
+          />
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email Field */}
@@ -151,6 +164,11 @@ export const LoginPage: React.FC = () => {
               {formErrors.password && (
                 <p className="mt-1 text-sm text-red-600">{formErrors.password}</p>
               )}
+              <div className="mt-2 text-right">
+                <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700">
+                  Forgot password?
+                </Link>
+              </div>
             </div>
 
             {/* Submit Button */}

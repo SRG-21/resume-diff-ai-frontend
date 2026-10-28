@@ -1,12 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/useAuth';
+import { useBilling } from '../context/useBilling';
+
+const HIDDEN_ON = ['/login', '/signup', '/forgot-password', '/reset-password'];
 
 export const Navbar: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
+  const { status, can } = useBilling();
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -18,15 +22,9 @@ export const Navbar: React.FC = () => {
         setIsProfileMenuOpen(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  // Close mobile menu on route change
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -35,114 +33,101 @@ export const Navbar: React.FC = () => {
     navigate('/login');
   };
 
-  // Don't show navbar on login/signup pages
-  if (location.pathname === '/login' || location.pathname === '/signup') {
-    return null;
-  }
+  if (HIDDEN_ON.includes(location.pathname)) return null;
+
+  const links = isAuthenticated
+    ? [
+        { to: '/app', label: 'Compare' },
+        { to: '/history', label: 'History' },
+        { to: '/resumes', label: 'Resumes' },
+        { to: '/tracker', label: 'Tracker' },
+        ...(can('bulk_rank') ? [{ to: '/bulk', label: 'Bulk' }] : []),
+        { to: '/pricing', label: 'Pricing' },
+      ]
+    : [{ to: '/pricing', label: 'Pricing' }];
+
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
+    `text-sm font-medium transition-colors ${isActive ? 'text-blue-600' : 'text-gray-600 hover:text-gray-900'}`;
+
+  const planBadge = status && status.plan !== 'free' ? status.plan_name : null;
 
   return (
-    <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+    <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50" aria-label="Main">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <div className="flex items-center">
-            <Link to="/" className="flex items-center gap-2">
-              <svg
-                className="w-8 h-8 text-blue-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-              <span className="text-xl font-bold text-gray-900 hidden sm:block">
-                Resume Diff AI
-              </span>
-            </Link>
-          </div>
+          <Link to="/" className="flex items-center gap-2">
+            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <span className="text-xl font-bold text-gray-900 hidden sm:block">Resume Diff AI</span>
+          </Link>
 
-          {/* Desktop Navigation */}
+          {/* Desktop navigation */}
           <div className="hidden md:flex items-center gap-6">
+            {links.map((l) => (
+              <NavLink key={l.to} to={l.to} className={linkClass} end={l.to === '/'}>
+                {l.label}
+              </NavLink>
+            ))}
+
             {isAuthenticated ? (
-              <>
-                {/* Nav Links */}
-                <Link
-                  to="/"
-                  className={`text-sm font-medium transition-colors ${
-                    location.pathname === '/'
-                      ? 'text-blue-600'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
+              <div className="relative" ref={profileMenuRef}>
+                <button
+                  onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                  className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900 focus:outline-none"
+                  aria-haspopup="menu"
+                  aria-expanded={isProfileMenuOpen}
                 >
-                  Compare
-                </Link>
-
-                {/* Profile Dropdown */}
-                <div className="relative" ref={profileMenuRef}>
-                  <button
-                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                    className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900 focus:outline-none"
-                  >
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-blue-600 font-semibold text-sm">
-                        {user?.name?.charAt(0).toUpperCase() || 'U'}
-                      </span>
-                    </div>
-                    <span className="hidden lg:block">{user?.name}</span>
-                    <svg
-                      className={`w-4 h-4 transition-transform ${isProfileMenuOpen ? 'rotate-180' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {isProfileMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-1 border border-gray-200">
-                      <div className="px-4 py-2 border-b border-gray-100">
-                        <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
-                        <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-                      </div>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                        Sign out
-                      </button>
-                    </div>
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-blue-600 font-semibold text-sm">{user?.name?.charAt(0).toUpperCase() || 'U'}</span>
+                  </div>
+                  {planBadge && (
+                    <span className="rounded-full bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white">{planBadge}</span>
                   )}
-                </div>
-              </>
+                </button>
+
+                {isProfileMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg py-1 border border-gray-200" role="menu">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
+                      <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                    </div>
+                    <Link
+                      to="/billing"
+                      role="menuitem"
+                      onClick={() => setIsProfileMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Account & billing
+                    </Link>
+                    <button
+                      role="menuitem"
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <>
-                <Link
-                  to="/login"
-                  className="text-sm font-medium text-gray-600 hover:text-gray-900"
-                >
+                <Link to="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900">
                   Sign in
                 </Link>
-                <Link
-                  to="/signup"
-                  className="btn-primary text-sm py-2"
-                >
-                  Sign up
+                <Link to="/signup" className="btn-primary text-sm py-2">
+                  Get started free
                 </Link>
               </>
             )}
           </div>
 
-          {/* Mobile Hamburger Button */}
+          {/* Mobile hamburger */}
           <div className="md:hidden">
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -150,75 +135,62 @@ export const Navbar: React.FC = () => {
               aria-expanded={isMobileMenuOpen}
               aria-label="Toggle menu"
             >
-              {isMobileMenuOpen ? (
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              ) : (
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              )}
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d={isMobileMenuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'}
+                />
+              </svg>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile menu */}
       {isMobileMenuOpen && (
         <div className="md:hidden border-t border-gray-200 bg-white">
-          <div className="px-4 py-4 space-y-3">
+          <div className="px-4 py-4 space-y-1">
+            {isAuthenticated && (
+              <div className="pb-3 mb-2 border-b border-gray-100">
+                <p className="font-medium text-gray-900">{user?.name}</p>
+                <p className="text-sm text-gray-500">{user?.email}</p>
+              </div>
+            )}
+            {links.map((l) => (
+              <NavLink
+                key={l.to}
+                to={l.to}
+                end={l.to === '/'}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={({ isActive }) =>
+                  `block px-3 py-2 rounded-lg text-base font-medium ${isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-700 hover:bg-gray-50'}`
+                }
+              >
+                {l.label}
+              </NavLink>
+            ))}
             {isAuthenticated ? (
               <>
-                {/* User Info */}
-                <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
-                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-blue-600 font-semibold">
-                      {user?.name?.charAt(0).toUpperCase() || 'U'}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{user?.name}</p>
-                    <p className="text-sm text-gray-500">{user?.email}</p>
-                  </div>
-                </div>
-
-                {/* Nav Links */}
                 <Link
-                  to="/"
-                  className={`block px-3 py-2 rounded-lg text-base font-medium ${
-                    location.pathname === '/'
-                      ? 'bg-blue-50 text-blue-600'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
+                  to="/billing"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="block px-3 py-2 rounded-lg text-base font-medium text-gray-700 hover:bg-gray-50"
                 >
-                  Compare Resume
+                  Account & billing
                 </Link>
-
-                {/* Logout */}
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-base font-medium text-red-600 hover:bg-red-50"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
+                <button onClick={handleLogout} className="w-full text-left px-3 py-2 rounded-lg text-base font-medium text-red-600 hover:bg-red-50">
                   Sign out
                 </button>
               </>
             ) : (
               <>
-                <Link
-                  to="/login"
-                  className="block px-3 py-2 rounded-lg text-base font-medium text-gray-700 hover:bg-gray-50"
-                >
+                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-base font-medium text-gray-700">
                   Sign in
                 </Link>
-                <Link
-                  to="/signup"
-                  className="block px-3 py-2 rounded-lg text-base font-medium bg-blue-600 text-white text-center hover:bg-blue-700"
-                >
-                  Sign up
+                <Link to="/signup" onClick={() => setIsMobileMenuOpen(false)} className="btn-primary block text-center">
+                  Get started free
                 </Link>
               </>
             )}
@@ -228,5 +200,3 @@ export const Navbar: React.FC = () => {
     </nav>
   );
 };
-
-export default Navbar;

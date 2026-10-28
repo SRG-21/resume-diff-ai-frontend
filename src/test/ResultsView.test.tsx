@@ -14,9 +14,10 @@ describe('ResultsView', () => {
 
   const mockOnNewComparison = vi.fn();
 
-  it('should render match percentage', () => {
+  it('should render match percentage', async () => {
     render(<ResultsView data={mockData} onNewComparison={mockOnNewComparison} />);
-    expect(screen.getByText('75%')).toBeInTheDocument();
+    // the progress ring counts up from 0 over ~1.5s
+    expect(await screen.findByText('75%', {}, { timeout: 3000 })).toBeInTheDocument();
   });
 
   it('should render matched skills', () => {
@@ -49,8 +50,8 @@ describe('ResultsView', () => {
 
   it('should show export buttons when missing skills exist', () => {
     render(<ResultsView data={mockData} onNewComparison={mockOnNewComparison} />);
-    expect(screen.getByRole('button', { name: /copy to clipboard/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /export csv/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /copy missing skills/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /export missing skills/i })).toBeInTheDocument();
   });
 
   it('should not show export buttons when no missing skills', () => {
@@ -59,7 +60,7 @@ describe('ResultsView', () => {
       missingSkills: [],
     };
     render(<ResultsView data={dataWithoutMissingSkills} onNewComparison={mockOnNewComparison} />);
-    expect(screen.queryByRole('button', { name: /copy to clipboard/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /copy missing skills/i })).not.toBeInTheDocument();
   });
 
   it('should toggle raw JSON view', async () => {

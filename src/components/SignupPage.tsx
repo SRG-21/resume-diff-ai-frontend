@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/useAuth';
 import { ErrorMessage } from './ErrorMessage';
+import { GoogleButton } from './GoogleButton';
+import { startCheckout } from '../api/endpoints';
 
 // Email regex pattern
+const PRODUCTS = ['pro_monthly', 'pro_yearly', 'pass', 'coach_monthly'];
+
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 interface FormErrors {
@@ -15,7 +19,9 @@ interface FormErrors {
 
 export const SignupPage: React.FC = () => {
   const navigate = useNavigate();
-  const { signup, isLoading, error, clearError } = useAuth();
+  const [searchParams] = useSearchParams();
+  const chosenPlan = searchParams.get('plan');
+  const { signup, loginWithGoogle, isLoading, error, clearError } = useAuth();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -66,6 +72,19 @@ export const SignupPage: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
+  // Visitors who picked a paid plan on the pricing page go straight to checkout after signing up
+  const afterAuth = async () => {
+    if (chosenPlan && PRODUCTS.includes(chosenPlan)) {
+      try {
+        window.location.assign((await startCheckout(chosenPlan)).url);
+        return;
+      } catch {
+        // fall through to the app; they can retry from the pricing page
+      }
+    }
+    navigate('/app', { replace: true });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
@@ -80,7 +99,7 @@ export const SignupPage: React.FC = () => {
         email: email.toLowerCase(),
         password,
       });
-      navigate('/');
+      await afterAuth();
     } catch {
       // Error is handled by auth context
     }
@@ -128,6 +147,16 @@ export const SignupPage: React.FC = () => {
               />
             </div>
           )}
+
+          <GoogleButton
+            text="signup_with"
+            onCredential={(credential) => {
+              clearError();
+              loginWithGoogle(credential)
+                .then(afterAuth)
+                .catch(() => {});
+            }}
+          />
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Name Field */}
@@ -319,6 +348,12 @@ export const SignupPage: React.FC = () => {
               )}
             </button>
           </form>
+
+          <p className="mt-4 text-xs text-gray-500 text-center">
+            By creating an account you agree to our{' '}
+            <Link to="/terms" className="underline">Terms</Link> and{' '}
+            <Link to="/privacy" className="underline">Privacy Policy</Link>.
+          </p>
 
           {/* Login Link */}
           <div className="mt-6 text-center">

@@ -1,145 +1,101 @@
 import { useState, useRef, useCallback } from 'react';
 import type { CompareResponse, CompareState } from '../types/api';
-import { getAccessToken } from '../context/AuthContext';
+import { apiFetch, toApiError } from '../api/client';
+import { track } from '../analytics';
 
-interface UseCompareParams {
-  apiBaseUrl?: string;
-}
-
-interface CompareOptions {
+export interface CompareOptions {
   jdFile?: File | null;
   jdText?: string;
-  resumeFile: File;
+  jdUrl?: string;
+  resumeFile?: File | null;
+  /** Use a previously saved resume instead of uploading one */
+  resumeId?: string;
+  /** Save the uploaded resume under this name for reuse */
+  saveResumeAs?: string;
 }
 
-export const useCompare = ({ apiBaseUrl = '/api' }: UseCompareParams = {}) => {
+const friendlyNetworkError = (message: string): string => {
+  if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+    return 'Unable to connect to the server. Please check your connection and try again.';
+  }
+  if (message.includes('CORS')) {
+    return 'The server is not configured to accept requests from this site.';
+  }
+  return message;
+};
+
+export const useCompare = () => {
   const [state, setState] = useState<CompareState>({
     data: null,
     loading: false,
     error: null,
+    errorCode: null,
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const compare = useCallback(
-    async (options: CompareOptions): Promise<void> => {
-      // Cancel any previous request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+  const compare = useCallback(async (options: CompareOptions): Promise<void> => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+
+    setState({ data: null, loading: true, error: null, errorCode: null });
+
+    try {
+      const formData = new FormData();
+      if (options.jdFile) {
+        formData.append('jd_file', options.jdFile);
+      } else if (options.jdText) {
+        formData.append('jd_text', options.jdText);
+      } else if (options.jdUrl) {
+        formData.append('jd_url', options.jdUrl);
       }
-
-      // Create new abort controller
-      abortControllerRef.current = new AbortController();
-
-      setState({ data: null, loading: true, error: null });
-
-      try {
-        // Get auth token
-        const accessToken = getAccessToken();
-        if (!accessToken) {
-          throw new Error('Please log in to compare resumes');
-        }
-
-        // Build FormData
-        const formData = new FormData();
-
-        if (options.jdFile) {
-          formData.append('jd_file', options.jdFile);
-        } else if (options.jdText) {
-          formData.append('jd_text', options.jdText);
-        }
-
+      if (options.resumeFile) {
         formData.append('resume_file', options.resumeFile);
-
-        // Construct full API URL
-        const apiUrl = `${apiBaseUrl}/compare`;
-
-        // Make API request with auth header
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          body: formData,
-          signal: abortControllerRef.current.signal,
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        });
-
-        if (!response.ok) {
-          let errorMessage = `Server error: ${response.status}`;
-          
-          // Provide specific error messages based on status code
-          if (response.status === 401) {
-            errorMessage = 'Session expired. Please log in again.';
-          } else if (response.status === 404) {
-            errorMessage = 'API endpoint not found (404). Please ensure the backend server is running and configured correctly.';
-          } else if (response.status === 500) {
-            errorMessage = 'Internal server error (500). Please check the backend server logs.';
-          } else if (response.status === 413) {
-            errorMessage = 'File too large (413). Please upload smaller files.';
-          } else {
-            try {
-              const errorData = await response.json();
-              errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
-            } catch {
-              // If response is not JSON, use status text
-              errorMessage = response.statusText || errorMessage;
-            }
-          }
-
-          throw new Error(errorMessage);
-        }
-
-        const data: CompareResponse = await response.json();
-
-        setState({ data, loading: false, error: null });
-      } catch (err) {
-        if (err instanceof Error) {
-          // Don't set error state if request was cancelled
-          if (err.name === 'AbortError') {
-            setState({ data: null, loading: false, error: null });
-            return;
-          }
-
-          // Provide better error messages for common issues
-          let errorMessage = err.message;
-          
-          if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-            errorMessage = 'Unable to connect to the server. Please check if the backend API is running and accessible.';
-          } else if (err.message.includes('CORS')) {
-            errorMessage = 'CORS error: The backend server is not configured to accept requests from this domain.';
-          } else if (err.message.includes('404') || err.message.includes('Not Found')) {
-            errorMessage = 'API endpoint not found. Please ensure the backend server is running at the configured URL.';
-          }
-
-          setState({ data: null, loading: false, error: errorMessage });
-        } else {
-          setState({
-            data: null,
-            loading: false,
-            error: 'An unexpected error occurred',
-          });
-        }
+        if (options.saveResumeAs) formData.append('save_resume_as', options.saveResumeAs);
+      } else if (options.resumeId) {
+        formData.append('resume_id', options.resumeId);
       }
-    },
-    [apiBaseUrl]
-  );
+
+      const response = await apiFetch('/compare', {
+        method: 'POST',
+        body: formData,
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw Object.assign(new Error('Session expired. Please log in again.'), { code: 'unauthorized' });
+        }
+        if (response.status === 413) {
+          throw new Error('File too large. Please upload smaller files.');
+        }
+        const apiError = await toApiError(response);
+        throw Object.assign(new Error(apiError.message), { code: apiError.code });
+      }
+
+      const data: CompareResponse = await response.json();
+      track('compare_completed', { match: data.matchPercent });
+      setState({ data, loading: false, error: null, errorCode: null });
+    } catch (err) {
+      if ((err as { name?: string } | null)?.name === 'AbortError') {
+        setState({ data: null, loading: false, error: null, errorCode: null });
+        return;
+      }
+      const message = err instanceof Error ? friendlyNetworkError(err.message) : 'An unexpected error occurred';
+      const code = (err as { code?: string } | null)?.code ?? null;
+      setState({ data: null, loading: false, error: message, errorCode: code });
+    }
+  }, []);
 
   const cancel = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
   }, []);
 
   const reset = useCallback(() => {
     cancel();
-    setState({ data: null, loading: false, error: null });
+    setState({ data: null, loading: false, error: null, errorCode: null });
   }, [cancel]);
 
-  return {
-    ...state,
-    compare,
-    cancel,
-    reset,
-  };
+  return { ...state, compare, cancel, reset };
 };

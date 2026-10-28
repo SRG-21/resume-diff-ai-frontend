@@ -158,3 +158,23 @@ describe('validation utilities', () => {
     });
   });
 });
+
+describe('resume file validation for the SaaS backend', () => {
+  it('rejects legacy .doc files with a conversion hint', () => {
+    const doc = new File(['x'], 'cv.doc', { type: 'application/msword' });
+    expect(validateResumeFile(doc)).toMatch(/\.docx or PDF/);
+  });
+
+  it('accepts a .docx that the browser reports with an empty MIME type', () => {
+    expect(validateResumeFile(new File(['x'], 'cv.docx', { type: '' }))).toBeNull();
+  });
+
+  it('still rejects unknown extensions with an empty MIME type', () => {
+    expect(validateResumeFile(new File(['x'], 'cv.exe', { type: '' }))).toMatch(/Invalid file type/);
+  });
+
+  it('validateForm skips the resume check when a saved resume is used', () => {
+    const errors = validateForm('text', null, 'We need a Python developer', null, false);
+    expect(errors).toEqual({});
+  });
+});

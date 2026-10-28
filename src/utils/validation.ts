@@ -4,7 +4,6 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 const ALLOWED_RESUME_TYPES = [
   'application/pdf',
-  'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'text/plain',
 ];
@@ -20,8 +19,15 @@ export const validateResumeFile = (file: File | null): string | null => {
     return `File size must be less than ${MAX_FILE_SIZE / 1024 / 1024}MB`;
   }
 
-  if (!ALLOWED_RESUME_TYPES.includes(file.type)) {
-    return 'Invalid file type. Please upload PDF, DOC, DOCX, or TXT file';
+  // The legacy .doc format cannot be read; ask for a conversion rather than failing on the server
+  if (file.type === 'application/msword' || file.name.toLowerCase().endsWith('.doc')) {
+    return 'Legacy .doc files are not supported. Please save the file as .docx or PDF.';
+  }
+
+  // Some browsers report an empty type for .docx, so fall back to the extension
+  const byExtension = /\.(pdf|docx|txt)$/i.test(file.name);
+  if (!ALLOWED_RESUME_TYPES.includes(file.type) && !(file.type === '' && byExtension)) {
+    return 'Invalid file type. Please upload a PDF, DOCX, or TXT file';
   }
 
   return null;
@@ -59,14 +65,17 @@ export const validateForm = (
   jdMode: 'upload' | 'text',
   jdFile: File | null,
   jdText: string,
-  resumeFile: File | null
+  resumeFile: File | null,
+  requireResumeFile = true
 ): ValidationErrors => {
   const errors: ValidationErrors = {};
 
-  // Validate resume
-  const resumeError = validateResumeFile(resumeFile);
-  if (resumeError) {
-    errors.resume = resumeError;
+  // Validate resume (skipped when a saved resume is used)
+  if (requireResumeFile) {
+    const resumeError = validateResumeFile(resumeFile);
+    if (resumeError) {
+      errors.resume = resumeError;
+    }
   }
 
   // Validate JD input based on mode
